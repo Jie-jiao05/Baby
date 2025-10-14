@@ -35,7 +35,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 ```
 
-```{r}
+```{r, warning= False}
 #| echo: false
 
 # --- Step 1: Read fertility data ---
@@ -129,293 +129,150 @@ ggplot() +
 
 ```
 
-
-
-# Introduction
-
-The process of urbanization is advancing rapidly in recent decade, leading to increasingly pronounced differences between urban and rural areas in terms of population density, economic development, infrastructure, and public health services. The disparity in death license number between Toronto and Outside City Limit has bring significant attention from researchers, serving as a vital indicator for socioeconomic conditions and public health as a response. But it is noticeable there is a fundamental difference between death record and death license, A death certificate is a document containing the details of a death that been documented in certain civic center, which is not necessarily capture the total mortality data or the causes of death, as a death record would, also it is not mandotory.
-This paper aims to analyze death license data from January 2011 to August 2024 collected by civic center with range from Toronto and Outside City Limits to explore the differences in 
-Whether there is a positive correlation between the number of deaths caused by weather extremes in particular months and the number of death licenses during the covid.
-While much of the existing research has focused on the gap in accessible health resource, income gap and community, few studies have investigated the changes in death license between urban and rural areas in response to various external factor. Extreme weather in certain month, and major public health crises (COVID-19) have emerged as significant factors influencing mortality globally. 
-In this study, we analyze death license data from Toronto and Outside City Limits areas recorded by civic center in each region to observe the response. The findings of this study will provide valuable insights for urban planners and public health experts, allowing them to consider the differences between urban and rural settings when formulating policies aimed at enhancing the overall public health response.
-The paper is structured in that Section Two covers the general data trend since 2011 to 2024 with measurement, since the data of 2024 is not completed, this paper use previous record to perform a prediction from September to December of 2024. Section Three critically examines the data, compare the number of death license between Toronto and Outside City Limits in each month focus on the period that the frequency of extreme weather is high, and the comparison of the year before and during Covid to exam potential relation. Conclusions indicate extreme weather in winter do have positive correlation with number of death license, but Covid-19 seems do not have relation to it .
-
-
-
-
-You can and should cross-reference sections and sub-sections. We use @talia, @opendatatorotno, and @rohan.
-
-The remainder of this paper is structured as follows. @sec-mydatasection
-
-
-
-# Data {#sec-data}
-
-## Data Source and Measurement {#sec-datasource}
-
-This report utilize the data collected by City Clerk’s Office published in Open Data Toronto is titled “Death Registry Statistic”( opendatatoronto 2024). This specific dataset used for the graphs and analyses in this paper, included information about the number of death linces , issued civic centres (Scarborough, North York, Toronto and Etobicoke), place of death, time period with unique id. All information is entered into the Registry Services Tracking System. The key limitation of this dataset is it only record the death that are be found but not include the death number in hospital or other institution and do not contain all the death number as the data is not fully complete and contain realistic death omission. In this dataset, no personal information is included, since the dataset is only used to count the number of death license in Toronto and Outside City Limit preserving the confidentiality of individual associated information.
-
-The dataset was analyzed using R (R Core Team 2022) and downloaded using the R package opendatatoronto (Gelfand 2022). Additionally, the packages tidyverse (Wickham et al. 2019), lubridate (Wickham 2023a), stringr (Wickham 2023b), readr( Hadley Wickham 2024), and forecast(Rob Hyndman 2024) ggplot2(Hadley Wickham 2025) ,dplyr(Hadley Wickham 2023)have been used in data cleaning and visualization.
-
-
-## Data Characteristics {#sec-datachar}
-
-The raw dataset contained 948 unique observation and 5 variable columns, all data are recorded in constant or str and all are filled with valid information. In the first cleaning step, I separate the time period column into year and month and then create a new data column by combining the year, month into proper date format for easier to get data. A glimpse of the final cleaned dataset can be seen in tbl-00
-Table 1.
-
-
 ```{r}
-#| label: tbl-00
-#| tbl-cap: "Sample of Cleaned Data of Death License in Toronto and Outside City Limits Area "
-#| echo: false
-#| message: false
-#| warning: false
-library(tidyverse)
-library(here)
-library(knitr)
+library(stringr)
+library(scico)
+fert_per_prov <- read_csv(here("fert_per_province.csv"))
 
-cleaned_data <- read_csv(here::here("~/Paper 1/starter_folder-main/data/analysis_data/analysis_data.csv"))
+fert_2023 <- fert_per_prov %>%
+  filter(
+    REF_DATE == 2023,
+    grepl("total fertility rate", Characteristics, ignore.case = TRUE)
+  )
 
-# Display the first 10 rows of the data as a table
-cleaned_data %>% 
-  head(10) %>% 
-  kable()
+# ==== Step 3: Select relevant columns (Province, Year, and Value) ====
+fert_2023_summary <- fert_2023 %>%
+  select(GEO, REF_DATE, Characteristics, VALUE)
 
 
-```
-## Data trend {#sec-datatrend} 
-The histogram fig-01 shows a consistent difference in the number of death license in Toronto and Outside City Limit area from 2011 to August 2024. The general difference between the two areas is generally unchanged, but the number of death licenses in Toronto fell in year 2022 and returned to the average in year 2023. Since this data set provided by OpendataToronto is updated monthly, the data from September to December 2024 cannot be obtained until the completion of this paper, so there will be some bias in this specific period. The following section will try to predict this part of data by building a prediction model.
 
-```{r}
-#| label: fig-01
-#| fig-cap: "Histogram of Death Lincese From 2011 to 2024"
-#| fig-align: 'center'
-#| echo: false
-#| warning: false
-library(readr)
+# ==== Step 3: Clean province names ====
+fert_2023_summary <- fert_2023_summary %>%
+  mutate(
+    GEO_clean = GEO %>%
+      str_replace(", place of residence of mother", "") %>%
+      str_trim()
+  )
 
-data <- read_csv(here::here("~/Paper 1/starter_folder-main/data/analysis_data/analysis_data.csv"))
+# ==== Step 4: Load the map ====
+canada <- ne_states(country = "canada", returnclass = "sf")
 
-data |>
-  filter(place_of_death %in% c("Toronto", "Outside City Limits")) |>
-  group_by(year, place_of_death) |>
-  summarise(death_licenses = sum(death_licenses), .groups = "drop") |>
-  ggplot(mapping = aes(x = year, y = death_licenses, fill = place_of_death)) +
-  geom_bar(stat = "identity", position = "dodge", alpha = 0.5) +
-  theme_minimal() +
-  labs(
-    x = "Year", y = "Number of Death Licenses",
-    fill = "Place of Death",
-    caption = "Data source: Opendatatoronto."
-  ) +
-  scale_fill_brewer(palette = "Set1")
-
-
-```
-## Data trend {#sec-datainmonth} 
-In order to make the data more complete and to be able to better measure the trends in terms of years, this paper tries to use time series analysis of the data through the September to December data from 2011-2023 for forecasting and generating, by capturing the trends to generate future values to make predictions. The final output showed in fig-2 prediction model. In general, we can simulate a overall data after adding this number into the bar chart in fig-3. For the correctness of the rigor of the data, the analysis of this paper will not include this part of the generated data.
-
-```{r}
-#| label: fig-02 prediction model
-#| tbl-cap: "Sample of Cleaned Data of Death License in Toronto and Outside City Limits Area "
-#| echo: false
-#| message: false
-#| warning: false
-# Load required libraries
-library(tidyverse)
-library(here)
-library(forecast)
-
-# Read the data
-data <- read_csv(here::here("~/Paper 1/starter_folder-main/data/analysis_data/analysis_data.csv"))
-
-# Data manipulation to summarize total death licenses by month
-summary_monthly_data <- data |>
-  group_by(year, month) |>
-  summarise(death_licenses = sum(death_licenses, na.rm = TRUE), .groups = "drop")
-
-# Convert to time series object
-ts_data <- ts(summary_monthly_data$death_licenses, start = c(min(summary_monthly_data$year), 1), frequency = 12)
-
-# Forecasting for September to November 2024
-forecast_horizon <- 3  # We want to forecast for 3 months
-fit <- ets(ts_data)  # Exponential smoothing state space model
-forecast_results <- forecast(fit, h = forecast_horizon)
-
-# Prepare data for bar chart
-predicted_months <- c("Sep 2024", "Oct 2024", "Nov 2024")
-predicted_values <- as.numeric(forecast_results$mean)
-
-# Create a data frame for plotting
-prediction_data <- data.frame(
-  month = predicted_months,
-  death_licenses = predicted_values
+# ==== Step 5: Manual name reconciliation ====
+# Ensure names match exactly between GEO_clean and canada$name
+name_map <- c(
+  "Newfoundland and Labrador" = "Newfoundland and Labrador",
+  "Prince Edward Island" = "Prince Edward Island",
+  "Nova Scotia" = "Nova Scotia",
+  "New Brunswick" = "New Brunswick",
+  "Quebec" = "Québec",
+  "Ontario" = "Ontario",
+  "Manitoba" = "Manitoba",
+  "Saskatchewan" = "Saskatchewan",
+  "Alberta" = "Alberta",
+  "British Columbia" = "British Columbia",
+  "Yukon" = "Yukon",
+  "Northwest Territories" = "Northwest Territories",
+  "Nunavut" = "Nunavut"
 )
 
-# Create the bar chart for the forecasted death licenses
-ggplot(prediction_data, aes(x = month, y = death_licenses)) +
-  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
-  theme_minimal() +
+fert_2023_summary <- fert_2023_summary %>%
+  mutate(GEO_match = recode(GEO_clean, !!!name_map))
+
+# ==== Step 6: Join with map ====
+canada_map <- canada %>%
+  left_join(fert_2023_summary, by = c("name" = "GEO_match"))
+
+# ==== Step 7: Verify missing provinces ====
+print(setdiff(canada$name, canada_map$name[!is.na(canada_map$VALUE)]))
+
+ggplot(canada_map) +
+  geom_sf(aes(fill = VALUE), color = "white", linewidth = 0.3) +
+  geom_sf_text(
+    aes(label = round(VALUE, 2)),
+    color = "black",
+    size = 3.5,
+    check_overlap = TRUE
+  ) +
+  scale_fill_gradient(
+    low = "#FDE0DD",   # light red
+    high = "#99000D",  # dark red
+    name = "Fertility Rate\n(children per woman)",
+    na.value = "grey90"
+  ) +
   labs(
-    x = "Month",
-    y = "Predicted Number of Death Licenses",
-    title = "Predicted Death Licenses for September to November 2024",
-    caption = "Data source: Opendatatoronto.."
-    
+    title = "Total Fertility Rate by Province (2023)",
+    caption = "Source: Statistics Canada"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "right",
+    axis.text = element_blank(),       # remove axis text
+    axis.ticks = element_blank(),      # remove axis ticks
+    axis.title = element_blank(),      # remove x and y labels
+    panel.grid = element_blank(),      # remove grid lines
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 12)
   )
-total_predicted_death_licenses <- sum(predicted_values)
-total_predicted_death_licenses
-# Print the total predicted death licenses
-
 ```
-Based on the available data, there is a slow upward trend for outside city limits, and fluctuate trend for the Toronto area could be observed. But based on our prediction showed on fig-4, it is predictable the total death license in 2024 will above the mean line and will push the true mean line slightly above what this paper have simulated.
+
 ```{r}
-#| label: fig-03
-#| fig-cap: "Line Plot of Total Death License by Year"
-#| fig-align: 'center'
-#| echo: false
-#| warning: false
-library(dplyr)
-library(ggplot2)
-library(lubridate)
+library(readxl)
+fertility_trend <- read_excel(here("Canada_Fertility_1921_2022.xlsx"))
 
-# Ensure your date column is in Date format
-data$date <- as.Date(data$date)
+fertility_postWWII <- fertility_trend %>%
+  filter(Year >= 1946)
 
-# Filter for relevant places and extract year
-yearly_death_licenses <- data |>
-  filter(place_of_death %in% c("Toronto", "Outside City Limits")) |>  # Filter for Toronto and Outside City Limits
-  mutate(year = year(date)) |>                                       # Create a new column for the year
-  group_by(year, place_of_death) |>                                 # Group by year and place of death
-  summarise(total_death_licenses = sum(death_licenses, na.rm = TRUE), .groups = "drop")  # Sum up death licenses
+ggplot(fertility_postWWII, aes(x = Year)) +
+  # Highlight selected historical/economic events after 1946
+  annotate("rect", xmin = 1947, xmax = 1948, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1953, xmax = 1954, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1974, xmax = 1975, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1981, xmax = 1982, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1990, xmax = 1992, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 2008, xmax = 2009, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 2020, xmax = 2021, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
 
-# Calculate the mean for each place of death
-mean_death_licenses <- yearly_death_licenses |>
-  group_by(place_of_death) |>                                      # Group by place of death
-  summarise(mean_death_licenses = mean(total_death_licenses, na.rm = TRUE), .groups = "drop")
+  # Total fertility rate (blue line)
+  geom_line(aes(y = `Total fertility rate`, color = "Total fertility rate"), linewidth = 1.1) +
+  # Replacement level (red line)
+  geom_line(aes(y = `Cohort replacement level`, color = "Cohort replacement level"),
+            linewidth = 1, linetype = "solid") +
 
-# Create the line plot
-ggplot(yearly_death_licenses, aes(x = year, y = total_death_licenses, color = place_of_death)) +
-  geom_line(size = 1.2) +                                           # Line for each place of death
-  geom_point(size = 3) +                                           # Points on the line for better visibility
-  geom_hline(data = mean_death_licenses, aes(yintercept = mean_death_licenses, color = place_of_death), 
-             linetype = "dashed", size = 1) +                    # Mean line
-  theme_minimal() +
+  # Annotate key post-war milestones
+  annotate("text", x = 1960, y = 4.0, label = "1960: Contraceptive pill approved",
+           color = "black", size = 3.5, hjust = 0) +
+  annotate("text", x = 1969, y = 3.0, label = "1969: Decriminalization of\ncontraception & abortion",
+           color = "black", size = 3.5, hjust = 0) +
+  annotate("text", x = 2015, y = 1.8, label = "2020: COVID\n-19 pandemic",
+           color = "black", size = 3.5, hjust = 0) +
+
+  # Color settings
+  scale_color_manual(values = c(
+    "Total fertility rate" = "blue",
+    "Cohort replacement level" = "red"
+  )) +
+
+  # Axis limits and labels
+  coord_cartesian(xlim = c(1946, 2022)) +
   labs(
-    title = "Line Plot of Total Death License by Year",
+    title = "Total Fertility Rate and Historical Events, Canada (1946–2022)",
+    subtitle = "Number of children per woman",
+    y = "Number of children per woman",
     x = "Year",
-    y = "Total Number of Death Licenses",
-    caption = "Data source: Your Data Source.",
-    color = "Place of Death"
+    color = NULL,
   ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better visibility
-
-
-
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "top",
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank()
+  )
 ```
-# Results {#sec-results}
-## Protential  relation with Weather
-In recent years, with the sever climate change, there has been a higher death event that can be related to teh extreme weather. As noted by fig-6, Toronto doesn't seem to have received much of an impact. This bar chart shows the total number of death licenses by month from 2011 to 2024 (do not include 2024, 9-12), and the only peak observed is in January, while all other months are within the mean line except for March and May. The data provided by Toronto Public Health indicitate in during 2011-22 total extreme weather is 262 and 115 happened in January. Considering that Toronto's summer climate is more favorable compared to other countries in different regions, leading to a lower impact of extreme hot weather on deaths, but it is possible that severe cold weather may have led to more deaths and resulted in higher death license been issued  in January. By examining the national library of medicine in CMAJ Open. 2016 Jan-Mar; 4(1): E48 An article entitled “Assessment of the effect of cold and hot temperatures on mortality in Ontario, Canada: a population-based study” was published in CMAJ Open. 2016 Jan-Mar; 4(1): E48. A population-based study An article entitled “Assessment of the effect of cold and hot temperatures on mortality in Ontario, Canada: a population-based study” cited “Across Ontario, each 5°C change in daily temperature was estimated to induce 7 excess deaths per day in cold seasons and 4 excess deaths in warm seasons. and 4 excess deaths in warm seasons.” Concluded with the data this paper simulated, this suggests that there may be a positive correlation between cold weather and death license.
-```{r}
-#| label: fig-04
-#| fig-cap: "Total Death License by Month"
-#| fig-align: 'center'
-#| echo: false
-#| warning: false
-library(dplyr)
-library(ggplot2)
-library(lubridate)
-
-# Ensure your date column is in Date format
-data$date <- as.Date(data$date)
-
-# Extract month from the date and aggregate death licenses by month (regardless of year)
-monthly_death_licenses <- data |>
-  mutate(month = month(date, label = TRUE, abbr = TRUE)) |>  # Create a new column for the month
-  group_by(month) |>                                       # Group by month
-  summarise(total_death_licenses = sum(death_licenses, na.rm = TRUE), .groups = "drop") # Sum up death licenses
-
-# Calculate the mean total death licenses
-mean_death_licenses <- mean(monthly_death_licenses$total_death_licenses)
-
-# Create the bar chart with mean line
-ggplot(monthly_death_licenses, aes(x = month, y = total_death_licenses)) +
-  geom_bar(stat = "identity", fill = "skyblue") +  # Bar for each month
-  geom_hline(yintercept = mean_death_licenses, color = "red", linetype = "dashed", size = 1) +  # Mean line
-  theme_minimal() +
-  labs(
-    title = "Total Death Licenses by Month (2011-2024)",
-    x = "Month",
-    y = "Total Number of Death Licenses",
-    caption = "Data source: Your Data Source."
-  ) +
-  scale_x_discrete(limits = month.abb) +  # Ensure months are in order
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better visibility
-
-```
-
-
-## Covid and Death License
-Fig-05 shows the dataset presented below the dot plot, in order to more visually observe the change in the number of death licenses during covid-19, this article narrows the dataset down to the period between 2017-2024 and in presents each month's data separately. From fig-05, there was not much change during the epidemic (2019-2022), the whole graph only shows extreme values in 3 months, , one of which occurred in 08-2020 but then fell back do not show a consistent trend, so in this paper it will be more proper to be treated as an outlier and is not statistically significant, and the overall distribution is more fitted with uniform distribution. In conclusipn the data proves that global wide public health is not correlated with the number of death license in Toronto and its outside city limits.
-
-
-```{r}
-#| label: fig-05
-#| fig-cap: "Monthly Death License Dot Plot"
-#| echo: false
-
-# Read the CSV file
-data <- read_csv(here::here("~/Paper 1/starter_folder-main/data/analysis_data/analysis_data.csv"))
-# Load necessary libraries
-library(tidyverse)
-library(lubridate)
-
-# Read the CSV file
-data <- read_csv(here::here("~/Paper 1/starter_folder-main/data/analysis_data/analysis_data.csv"))
-
-# Process the data
-plot_data <- data %>%
-  # Filter only the relevant locations
-  filter(place_of_death %in% c("Toronto", "Outside City Limits")) %>%
-  # Group by year, month, and place of death, and sum the death licenses
-  group_by(year, month, place_of_death) %>%
-  summarise(death_licenses = sum(death_licenses, na.rm = TRUE), .groups = 'drop') %>%
-  # Create a new date column for easier plotting
-  mutate(date = make_date(year, month, 1)) %>%
-  # Filter to restrict time from 2015 to 2024
-  filter(year >= 2017 & year <= 2024)
-
-# Create a dot plot with clearer x-axis
-ggplot(plot_data, aes(x = date, y = death_licenses, color = place_of_death)) +
-  geom_point(size = 3) + # Use points for the dot plot
-  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") + # Show every 3 months
-  labs(
-    title = "Monthly Death Licenses in Toronto and Outside City Limits (2015-2024)",
-    x = "Year-Month",
-    y = "Number of Death Licenses",
-    color = "Place of Death"
-  ) +
-  theme_minimal() + # Clean theme
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis text for readability
-
-
-```
-# Discussion {#sec-results}
-
-This paper analyzes the number of death licenses registered by civic centers from 2011 to September 2024. By visualizing death licenses by year and month, and using time series for forecasting, it is concluded that there is a positive correlation between the increase in extreme weather events in Toronto and the number of death licenses. Despite the negative impact of Covid-19 on Canada's economy, society, and healthcare, but the distrbution of death license in each year could not reveal a noticiable outcome as it more likly follow uniform disributionm   the dataset study was unable to conclude that there was any positive or negative correlation.
-
-Since this dataset only includes numbers, civic centers, and localities, it is not possible to determine the cause of death, and since death licenses are not mandatory for death and the concept is not equivalent to the total number of deaths in the Toronto area, this data does not provide an analysis of the total number of deaths and the causes of deaths in Toronto area, but it is useful for the government to know how many deaths have occurred in the Toronto area and do apply for death license for furthur applicatipn. However, for government departments, the death license statistics are useful for the registration and improvement of government health policies. As of the completion of this article, the data for the period September-December 2024 is not yet available, and is therefore missing, but the main data for the analysis avoids this specific time period, and is fully described and projected in the article, so it does not bias the analysis too much.
-
-
-# References {#sec-results}
-
-Chen, Hong, et al. “Assessment of the Effect of Cold and Hot Temperatures on Mortality in Ontario, Canada: A Population-Based Study.” CMAJ Open, U.S. National Library of Medicine, 2 Feb. 2016, www.ncbi.nlm.nih.gov/pmc/articles/PMC4866918/. 
-
-City Clerk’s Office. “Open Data Dataset.” City of Toronto Open Data Portal, open.toronto.ca/dataset/death-registry-statistics/. Accessed 25 Sept. 2024. 
-
-City of Toronto. (2022, December 21). Statistics on extreme cold weather alerts in Toronto. https://www.toronto.ca/city-government/data-research-maps/research-reports/housing-and-homelessness-research-and-reports/statistics-on-extreme-cold-weather-alerts-in-toronto/ 
-
-Alexander, Rohan. “Telling Stories with Data.” Telling Stories with Data, 27 July 2023, tellingstorieswithdata.com/. 
-
-Service Ontario. “Get or Replace an Ontario Death Certificate.” Ontario.Ca, 24 Jan. 2012, 
-https://www.ontario.ca/page/get-or-replace-an-ontario-death-certificate#:~:text=A%20death%20certificate%20is%20a,Image.
