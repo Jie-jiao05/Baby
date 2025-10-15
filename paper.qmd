@@ -141,7 +141,7 @@ ahdkjahd
 
 
 # --- Step 1: 读取并清洗数据 ---
-death <- read_csv("Canada_Death.csv")
+death <- read_csv(here("Canada_Death.csv"), show_col_types = FALSE)
 
 death_2022 <- death %>%
   filter(
@@ -343,6 +343,356 @@ province_centroids <- st_centroid(canada_map) %>%
     label_combo = paste0(abbrev, "\n", round(VALUE, 2))
   )
 
+# Move NU and NT labels
+province_centroids <- province_centroids %>%
+  mutate(
+    X = case_when(
+      abbrev == "NU" ~ X - 4,       # shift left
+      abbrev == "NT" ~ X,           # keep x position
+      TRUE ~ X
+    ),
+    Y = case_when(
+      abbrev == "NU" ~ Y - 3.5,     # shift down
+      abbrev == "NT" ~ Y - 2.0,     # shift slightly down
+      TRUE ~ Y
+    )
+  )
+
+
+# === Step 4: Plot ===
+ggplot(canada_map) +
+  geom_sf(aes(fill = VALUE), color = "white", linewidth = 0.3) +
+  geom_text_repel(
+    data = province_centroids,
+    aes(X, Y, label = label_combo),
+    size = 3.5, color = "black", fontface = "bold",
+    box.padding = 0.5, point.padding = 0.3,
+    nudge_y = 0.8, segment.color = "gray70", max.overlaps = 20
+  ) +
+  coord_sf(xlim = c(-140, -52), ylim = c(41, 78), expand = FALSE) +
+  scale_fill_gradient(
+    low = "#FDE0DD",
+    high = "#99000D",
+    name = "Fertility Rate\n(children per woman)",
+    na.value = "grey90"
+  ) +
+  labs(
+    title = "Total Fertility Rate by Province (2023)",
+    caption = "Source: Statistics Canada"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "right",
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    plot.caption = element_text(size = 10, hjust = 0.5)
+  )
+
+```
+ahjkdak
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+# === Step 1: Load and filter ===
+fertility_trend <- read_excel(here("Canada_Fertility_1921_2022.xlsx"))
+
+fertility_postWWII <- fertility_trend %>%
+  filter(Year >= 1946)
+
+# === Step 2: Plot ===
+ggplot(fertility_postWWII, aes(x = Year)) +
+  # Highlight selected historical/economic events after 1946
+  annotate("rect", xmin = 1947, xmax = 1948, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1953, xmax = 1954, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1974, xmax = 1975, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1981, xmax = 1982, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1990, xmax = 1992, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 2008, xmax = 2009, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 2020, xmax = 2021, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+
+  # Total fertility rate (blue line)
+  geom_line(aes(y = `Total fertility rate`, color = "Total fertility rate"), linewidth = 1.1) +
+
+  # Replacement level (red line)
+  geom_line(aes(y = `Cohort replacement level`, color = "Cohort replacement level"),
+            linewidth = 1, linetype = "solid") +
+
+  # Annotate key post-war milestones
+  annotate("text", x = 1960, y = 4.0, label = "1960: Contraceptive pill approved",
+           color = "black", size = 3, hjust = 0) +
+  annotate("text", x = 1969, y = 3.0, label = "1969: Decriminalization of\ncontraception & abortion",
+           color = "black", size = 3, hjust = 0) +
+  annotate("text", x = 2015, y = 1.8, label = "      2020:
+COVID-19 pandemic",
+           color = "black", size = 3, hjust = 0) +
+
+  # Color settings
+  scale_color_manual(values = c(
+    "Total fertility rate" = "blue",
+    "Cohort replacement level" = "red"
+  )) +
+
+  # Axis limits and labels
+  coord_cartesian(xlim = c(1946, 2022)) +
+  labs(
+    title = "Total Fertility Rate and Historical Events, Canada (1946–2022)",
+    subtitle = "Number of children per woman",
+    y = "Number of children per woman",
+    x = "Year",
+    color = NULL,
+    caption = "Source: Statistics Canada"
+  ) +
+
+  theme_minimal(base_size = 13) +
+  theme(
+    # ✅ Center title, subtitle, and caption
+    plot.title = element_text(face = "bold", size = 12, hjust = 0.5, margin = margin(b = 6)),
+    plot.subtitle = element_text(size = 10, hjust = 0.5, margin = margin(b = 10)),
+    plot.caption = element_text(size = 10, hjust = 0.5, margin = margin(t = 10)),
+
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  )
+```
+ahdkjahd
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+
+# --- Step 1: 读取并清洗数据 ---
+death <- read_csv("Canada_Death.csv")
+
+death_2022 <- death %>%
+  filter(
+    country == "Canada",
+    year == 2022,
+    age_group == "0",
+    death > 6,
+    !str_detect(cause, "I000")     # 排除 I000
+  ) %>%
+  group_by(cause) %>%
+  summarise(total_deaths = sum(death, na.rm = TRUE)) %>%
+  arrange(desc(total_deaths))
+
+# --- Step 2: 绘制主图 ---
+p <- ggplot(death_2022,
+       aes(x = reorder(cause, total_deaths),
+           y = total_deaths)) +
+  geom_col(fill = "#1C3587", alpha = 0.9) +
+  coord_flip() +
+  labs(
+    title = "Leading Causes of Death in Canada (2022)",
+    subtitle = "Excluding causes with 0 deaths and I000",
+    x = NULL,
+    y = "Number of Deaths"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5, margin = margin(b = 6)),  # ✅ Centered title
+    plot.subtitle = element_text(size = 8, hjust = 0.5, margin = margin(b = 10)),             # ✅ Centered subtitle
+    axis.text.y = element_text(size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+# --- Step 3: 双栏 legend 文本 ---
+legend_text <- glue("
+I003 – Septicaemia                 I023 – Other cancer (incl. in situ, benign, or uncertain neoplasms)  
+I034 – Other heart diseases   I051 – Congenital malformations, deformations, and chromosomal abnormalities
+I026 – Other endocrinologic and metabolic diseases                   I039 – Pneumonia  
+I050 – Certain conditions originating in the perinatal period         I030 – Other diseases of nervous system
+I053 – Other accidents  I058 – Other ill-defined, unspecified and unknown causes of death
+")
+
+# --- Step 4: 绘制 legend 框 ---
+legend_box <- ggdraw() +
+  draw_label(
+    legend_text,
+    x = 0.5, y = 1,                # ✅ Center horizontally
+    hjust = 0.5, vjust = 1,
+    size = 6, lineheight = 1.35,
+    fontface = "plain"
+  ) +
+  theme(plot.margin = margin(10, 10, 10, 10))
+
+# --- Step 5: 合并主图 + legend ---
+final_plot <- plot_grid(p, legend_box, ncol = 1, rel_heights = c(3, 0.8))
+final_plot
+
+
+
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+# --- Step 1: Read data ---
+death <- read_csv("Canada_Death.csv")
+
+# --- Step 2: Filter for 2000–2022, age 0, Canada, and selected causes ---
+death_dot <- death %>% filter(country == "Canada",
+         year >= 2000, year <= 2022,
+         age_group == "0",
+         cause %in% c("I050", "I051", "I058")) %>%
+  group_by(year, cause) %>%
+  summarise(total_deaths = sum(death, na.rm = TRUE), .groups = "drop")
+
+# --- Step 3: Plot colored dots + separate gray dashed lines per cause ---
+ggplot(death_dot, aes(x = year, y = total_deaths, color = cause)) +
+  
+  # --- Colored dots for each cause ---
+  geom_point(size = 3, alpha = 0.5) +
+  
+  # --- Individual gray dashed fitted lines for each cause ---
+  geom_smooth(
+    aes(group = cause),   # separate line per cause
+    method = "lm", se = FALSE, color = "gray60",
+    linewidth = 1, linetype = "dashed"
+  ) +
+  
+  # --- Custom colors for dots ---
+  scale_color_manual(
+    values = c(
+      "I050" = "#E57373",   # red
+      "I051" = "#66BB6A",   # green
+      "I058" = "#64B5F6"    # blue
+    ),
+    labels = c(
+      "I050 – Perinatal conditions",
+      "I051 – Congenital malformations",
+      "I058 – Ill-defined causes"
+    ),
+    name = "Cause"
+  ) +
+  
+  # --- Labels and titles ---
+  labs(
+    title = "Infant Mortality in Canada (2000–2022)",
+    subtitle = "Age group: 0 years",
+    x = "Year",
+    y = "Total Deaths",
+    caption = "Source: Statistics Canada"
+  ) +
+  
+  # --- Style ---
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 8, face = "bold"),
+    legend.text = element_text(size =7),
+
+    # ✅ Center title, subtitle, caption
+    plot.title = element_text(face = "bold", size = 13, color = "#222", hjust = 0.5, margin = margin(b = 6)),
+    plot.subtitle = element_text(size = 8, color = "#555", hjust = 0.5, margin = margin(b = 10)),
+    plot.caption = element_text(size = 9, color = "gray40", hjust = 0.5, margin = margin(t = 10)),
+
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90", linewidth = 0.3)
+  )
+
+
+
+```
+asjhahk
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 7
+#| fig-width: 9
+
+# === Step 0: Fertility summary ===
+fert_per_prov <- read_csv(here("fert_per_province.csv"))
+
+fert_2023_summary <- fert_per_prov %>%
+  filter(
+    REF_DATE == 2023,
+    grepl("total fertility rate", Characteristics, ignore.case = TRUE)
+  ) %>%
+  select(GEO, REF_DATE, Characteristics, VALUE) %>%
+  mutate(
+    GEO_clean = str_replace(GEO, ", place of residence of mother", "") %>% str_trim(),
+    GEO_match = recode(GEO_clean,
+      "Newfoundland and Labrador" = "Newfoundland and Labrador",
+      "Prince Edward Island" = "Prince Edward Island",
+      "Nova Scotia" = "Nova Scotia",
+      "New Brunswick" = "New Brunswick",
+      "Quebec" = "Québec",
+      "Ontario" = "Ontario",
+      "Manitoba" = "Manitoba",
+      "Saskatchewan" = "Saskatchewan",
+      "Alberta" = "Alberta",
+      "British Columbia" = "British Columbia",
+      "Yukon" = "Yukon",
+      "Northwest Territories" = "Northwest Territories",
+      "Nunavut" = "Nunavut"
+    )
+  )
+
+# === Step 1: Read Canada map and merge ===
+canada <- ne_states(country = "canada", returnclass = "sf")
+canada_map <- canada %>%
+  left_join(fert_2023_summary, by = c("name" = "GEO_match"))
+
+# === Step 2: Province abbreviations ===
+province_abbrev <- c(
+  "Newfoundland and Labrador" = "NL",
+  "Prince Edward Island" = "PE",
+  "Nova Scotia" = "NS",
+  "New Brunswick" = "NB",
+  "Québec" = "QC",
+  "Ontario" = "ON",
+  "Manitoba" = "MB",
+  "Saskatchewan" = "SK",
+  "Alberta" = "AB",
+  "British Columbia" = "BC",
+  "Yukon" = "YT",
+  "Northwest Territories" = "NT",
+  "Nunavut" = "NU"
+)
+
+# === Step 3: Province centroids + abbreviated labels ===
+province_centroids <- st_centroid(canada_map) %>%
+  cbind(st_coordinates(.)) %>%
+  mutate(
+    abbrev = recode(name, !!!province_abbrev),
+    label_combo = paste0(abbrev, "\n", round(VALUE, 2))
+  )
+
+# Move NU and NT labels
+province_centroids <- province_centroids %>%
+  mutate(
+    X = case_when(
+      abbrev == "NU" ~ X - 5,       # shift left
+      abbrev == "NT" ~ X,           # keep x position
+      TRUE ~ X
+    ),
+    Y = case_when(
+      abbrev == "NU" ~ Y - 6,     # shift down
+      abbrev == "NT" ~ Y - 2.5,     # shift slightly down
+      TRUE ~ Y
+    )
+  )
+
+
 # === Step 4: Plot ===
 ggplot(canada_map) +
   geom_sf(aes(fill = VALUE), color = "white", linewidth = 0.3) +
@@ -520,4 +870,4 @@ ggplot(death_dot, aes(x = year, y = total_deaths, color = cause)) +
 
 
 ```
->>>>>>> e79f40b (resolve merge conflict)
+
