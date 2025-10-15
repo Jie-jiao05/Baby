@@ -452,4 +452,72 @@ COVID-19 pandemic",
     panel.grid.minor = element_blank()
   )
 ```
+<<<<<<< HEAD
 
+=======
+```{r}
+library(tidyverse)
+
+# --- Step 1: Read data ---
+death <- read_csv("Canada_Death.csv")
+
+# --- Step 2: Filter for 2000–2022, age 0, Canada, and selected causes ---
+death_dot <- death %>%
+  filter(country == "Canada",
+         year >= 2000, year <= 2022,
+         age_group == "0",
+         cause %in% c("I050", "I051", "I058")) %>%
+  group_by(year, cause) %>%
+  summarise(total_deaths = sum(death, na.rm = TRUE), .groups = "drop")
+
+# --- Step 3: Plot colored dots + separate gray dashed lines per cause ---
+ggplot(death_dot, aes(x = year, y = total_deaths, color = cause)) +
+  
+  # --- Colored dots for each cause ---
+  geom_point(size = 3, alpha = 0.6) +
+  
+  # --- Individual gray dashed fitted lines for each cause ---
+  geom_smooth(
+    aes(group = cause),   # separate line per cause
+    method = "lm", se = FALSE, color = "gray60",
+    linewidth = 1, linetype = "dashed"
+  ) +
+  
+  # --- Custom colors for dots ---
+  scale_color_manual(
+    values = c(
+      "I050" = "#E57373",   # red
+      "I051" = "#66BB6A",   # green
+      "I058" = "#64B5F6"    # blue
+    ),
+    labels = c(
+      "I050 – Perinatal conditions",
+      "I051 – Congenital malformations",
+      "I058 – Ill-defined causes"
+    ),
+    name = "Cause"
+  ) +
+  
+  # --- Labels and titles ---
+  labs(
+    title = "Infant Mortality in Canada (2000–2022)",
+    subtitle = "Age group: 0 years; Three selected causes with individual gray trend lines",
+    x = "Year",
+    y = "Total Deaths"
+  ) +
+  
+  # --- Style ---
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 9),
+    plot.title = element_text(face = "bold", size = 16, color = "#222"),
+    plot.subtitle = element_text(size = 12, color = "#555"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "gray90", linewidth = 0.3)
+  )
+
+
+```
+>>>>>>> e79f40b (resolve merge conflict)
