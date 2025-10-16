@@ -6,14 +6,12 @@ author:
 thanks: "Code and data are available at: https://github.com/Jie-jiao05/Paper-1.git"
 date: today
 date-format: long
-abstract: "Urbanization amplified the inequality between urban area and rural area, in various aspects, including population density, economic growth, infrastructure, and public health services. During 2019-2023 the global-wide public health panic Covid-19 and the rising number in extreme weather, all it cause the rising mortality not just in Toronto, also global wide. As death number and death license are two relatively separate concept. It is obvious that the Covid-19 and severe climate have positive correlation with number of death record, while number of death license only show a positive relation with severe weather in January specifically and uncorrelated with Covid-19, by analyzing Toronto and Outside City Limits data."
 
 format: pdf
 number-sections: true
 editor_options: 
   chunk_output_type: inline
 ---
-
 ```{r}
 #| include: false
 #| warning: false
@@ -37,16 +35,85 @@ library(readxl)
 ```
 
 ```{r}
+#| label: fig-glob
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Global Trend"
+
+
+fert <- read_csv("word_fert.csv", skip = 4)
+
+# 2️⃣ 筛选指标
+fert_rate <- fert %>%
+  filter(`Indicator Name` == "Fertility rate, total (births per woman)")
+
+# 3️⃣ 转成长表
+fert_long <- fert_rate %>%
+  pivot_longer(
+    cols = matches("^\\d{4}$"),
+    names_to = "year",
+    values_to = "fert_rate"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    fert_rate = as.numeric(fert_rate)
+  )
+
+# 4️⃣ 全球平均
+global_avg <- fert_long %>%
+  group_by(year) %>%
+  summarise(global_fert = mean(fert_rate, na.rm = TRUE)) %>%
+  drop_na(global_fert)
+
+# 5️⃣ 确定最后一年实际有数据的年份
+last_point <- global_avg %>%
+  filter(year == max(year))
+
+# 6️⃣ 绘图并标注最后一年数值
+ggplot(global_avg, aes(x = year, y = global_fert)) +
+  geom_line(color = "#1f78b4", size = 1.3) +
+  geom_point(color = "#1f78b4", size = 1.8) +
+  geom_text(
+    data = last_point,
+    aes(label = paste0(year, ": ", sprintf("%.2f", global_fert))),
+    vjust = -4,
+    hjust = 0.8,
+    color = "black",
+    fontface = "bold",
+    size = 4
+  ) +
+  expand_limits(y = last_point$global_fert * 1.05) +   # 防止被裁掉
+  labs(
+    title = "Global Fertility Rate (1960–2023)",
+    subtitle = "Average number of births per woman (World Bank WDI)",
+    x = "Year",
+    y = "Average Fertility Rate"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold",hjust=0.5),
+    plot.subtitle = element_text(color = "gray30",hjust=0.5)
+  )
+
+
+
+```
+Undoubtedly, the world is facing a profound challenge in fertility. As shown in @fig-glob, the average number of births per woman fell from more than 5.4 in 1960 to just 2.41 in 2023, a reduction of more than half. Although this global average is somewhat influenced by higher fertility rates in less developed regions, the downward trend remains evident across the world, with significant declines in both advanced and emerging economies. As shown in @fig-spec, all major economies experienced clear reductions in fertility between 1960 and 2023, and almost all are now below the global replacement level of about two births per woman. Emerging nations such as India and Brazil are also moving toward similar demographic patterns. While the decline has been relatively moderate in Europe and most pronounced in China, partly due to earlier population control policies, the overall pattern reflects a transformation that reaches far beyond population size. Persistently low fertility and population aging have raised concerns about shrinking labor forces and increasing dependency ratios, leading many countries to rely more heavily on immigration as a demographic buffer.
+
+```{r}
+#| label: fig-spec
 #| echo: false
 #| message: false
 #| warning: false
 #| fig-height: 7
 #| fig-width: 9
+#| fig-cap: "G7 and China, India, and Brazil"
 
-# --- Step 1: Read fertility data ---
-fert <- read_csv(here("Cleaned_fert_2023.csv"))
+# --- Step 1: Load cleaned fertility data ---
+fert <- read_csv(here("Cleaned_fert_1960_2023.csv"))
 
-# --- Step 2: Normalize names for map matching ---
+# --- Step 2: Harmonize names for map matching ---
 fert <- fert %>%
   mutate(Country = case_when(
     Country == "United States" ~ "United States of America",
@@ -54,236 +121,182 @@ fert <- fert %>%
     TRUE ~ Country
   ))
 
-# --- Step 3: Define target countries (based on real dataset names) ---
+# --- Step 3: Define target countries (可根据需要调整) ---
 target_countries <- c(
   "United States of America", "United Kingdom", "France", "Germany",
   "Italy", "Canada", "Japan", "Russian Federation",
   "China", "India", "Brazil"
 )
 
-# (the rest of your plotting code stays the same)
-
-
-# --- Step 4: Filter for target countries only ---
 fert_selected <- fert %>%
   filter(Country %in% target_countries)
 
-# --- Step 5: Get world map + centroids ---
+# --- Step 4: Load world map and centroids ---
 world <- ne_countries(scale = "medium", returnclass = "sf")
 world_points <- st_centroid(world) %>%
   cbind(st_coordinates(.)) %>%
   select(name, X, Y)
 
-# --- Step 6: Join coordinates ---
 fert_map <- fert_selected %>%
   left_join(world_points, by = c("Country" = "name")) %>%
   filter(!is.na(X) & !is.na(Y))
 
-# --- Step 7: Plot map ---
+# --- Step 5: Build refined map ---
 ggplot() +
-  geom_sf(data = world, fill = "gray97", color = "gray80", size = 0.2) +
+  # World background
+  geom_sf(data = world, fill = "#f7f7f7", color = "gray90", size = 0.2) +
 
-  # --- Transparent, coordinated bubbles ---
+  # 1960 layer — large transparent circles (soft orange)
+  geom_point(
+    data = fert_map,
+    aes(x = X, y = Y, size = FertilityRate_1960),
+    shape = 21, fill = "#fdd0a2", color = "gray50", alpha = 0.3
+  ) +
+
+  # 2023 layer — smaller, bold gradient circles
   geom_point(
     data = fert_map,
     aes(x = X, y = Y, size = FertilityRate_2023, fill = FertilityRate_2023),
-    shape = 21, color = "black", stroke = 0.25,
-    alpha = 0.55   # ✨ transparent
+    shape = 21, color = "gray20", stroke = 0.25, alpha = 0.7
   ) +
 
-  # --- Labels with fertility values ---
+  # Labels — light shadow style and better repel spacing
   geom_text_repel(
     data = fert_map,
     aes(x = X, y = Y, label = paste0(Country, "\n", round(FertilityRate_2023, 2))),
-    size = 2.4, fontface = "bold",
+    size = 2.8, fontface = "bold",
     color = "black",
-    segment.size = 0.15,
-    box.padding = 0.25,
-    point.padding = 0.2
+    segment.size = 0.1,
+    segment.color = "gray60",
+    box.padding = 0.3,
+    point.padding = 0.2,
+    max.overlaps = 15
   ) +
 
-  # --- Coordinated blue gradient (soft, elegant) ---
+  # Color and size scales
   scale_fill_gradientn(
-    colors = c("#fff5f0", "#fcbba1", "#ef3b2c", "#a50f15", "#67000d"),
+    colors = c( "#fcbba1", "#ef3b2c", "#a50f15", "#67000d"),
     name = "Fertility Rate (2023)"
   ) +
-
   scale_size_continuous(
-    range = c(4, 16),
-    name = "Fertility Rate (2023)",
+    range = c(5, 20),
+    name = "Fertility Rate",
     labels = scales::number_format(accuracy = 0.1)
   ) +
 
-  coord_sf(expand = FALSE) +
+  # Polished titles and styling
   labs(
-    title = "Fertility Rate (2023): G8 + China, India, Brazil",
-    subtitle = "Bubble size and color represent births per woman",
+    title = "Major Country Fertility Rate in 1960 and 2023",
+    subtitle = "Large circles = 1960 | Smaller colored circles = 2023",
+    caption = "Data source: World Development Indicators (World Bank, 2025-10-07)",
     x = "", y = ""
   ) +
-  theme_minimal(base_size = 14) +
+  coord_sf(expand = FALSE) +
+  theme_minimal(base_size = 13) +
   theme(
+    panel.grid = element_line(color = "gray90", size = 0.2),
     legend.position = "bottom",
     legend.box = "horizontal",
-    plot.title = element_text(size = 14, face = "bold",hjust=0.5),
-    plot.subtitle = element_text(size = 11,hjust=0.5),
-    panel.grid = element_line(color = "gray90", size = 0.2),
-    legend.title = element_text(size = 9),
+    legend.key.width = unit(1.2, "cm"),
+    plot.title = element_text(face = "bold", size = 17, hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5, color = "gray25"),
+    plot.caption = element_text(size = 8, hjust = 0.5, color = "gray40"),
+    legend.title = element_text(size = 9, face = "bold"),
     legend.text = element_text(size = 8)
   )
 
 
 ```
-ahdkjahd
+The roots of this transformation can be understood through both social and biological perspectives. On the social side, higher education levels, expanding female participation in the workforce, and rapid urbanization have redefined family structures and reduced the economic incentives for having children. Growing personal autonomy, delayed marriage, and shifting social expectations from traditional motherhood toward independent professional identity have further reshaped reproductive intentions. Psychological factors also contribute like fear of infant mortality, maternal self-doubt, and anxiety about the physical and emotional costs of childbirth have encouraged some individuals or couples to postpone or reconsider parenthood, with an increasing number choosing to remain child-free. Even more influential are rising economic pressures. High housing costs, unstable employment, and the growing expense of education have made parenting increasingly burdensome, reinforcing decisions to limit family size.
+
+These social, biological, and psychological transformations carry important implications for maternal and infant health. While fertility decline often occurs alongside broader demographic and socioeconomic change, it is not a direct cause of shifts in disease patterns. Instead, both reflect underlying improvements in living conditions, healthcare access, and women’s social status. As populations age and family sizes shrink, maternal and infant health indicators become key reflections of overall public health progress. In the Canadian context, understanding how provincial fertility decline corresponds with infant mortality and cause-specific disease burdens offers valuable insight into whether advancements in healthcare have successfully reduced preventable deaths and improved early-life outcomes over time.
+
 ```{r}
+#| label: fig-ca
 #| echo: false
 #| message: false
 #| warning: false
+#| fig-cap: "XXX"
 
+# === Step 1: Load and filter ===
+fertility_trend <- read_excel(here("Canada_Fertility_1921_2022.xlsx"))
 
-# --- Step 1: 读取并清洗数据 ---
-death <- read_csv(here("Canada_Death.csv"), show_col_types = FALSE)
+fertility_postWWII <- fertility_trend %>%
+  filter(Year >= 1946)
 
-death_2022 <- death %>%
-  filter(
-    country == "Canada",
-    year == 2022,
-    age_group == "0",
-    death > 6,
-    !str_detect(cause, "I000")     # 排除 I000
-  ) %>%
-  group_by(cause) %>%
-  summarise(total_deaths = sum(death, na.rm = TRUE)) %>%
-  arrange(desc(total_deaths))
+# === Step 2: Plot ===
+ggplot(fertility_postWWII, aes(x = Year)) +
+  # Highlight selected historical/economic events after 1946
+  annotate("rect", xmin = 1947, xmax = 1948, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1953, xmax = 1954, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1974, xmax = 1975, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1981, xmax = 1982, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 1990, xmax = 1992, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 2008, xmax = 2009, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
+  annotate("rect", xmin = 2020, xmax = 2021, ymin = -Inf, ymax = Inf,
+           fill = "grey70", alpha = 0.2) +
 
-# --- Step 2: 绘制主图 ---
-p <- ggplot(death_2022,
-       aes(x = reorder(cause, total_deaths),
-           y = total_deaths)) +
-  geom_col(fill = "#1C3587", alpha = 0.9) +
-  coord_flip() +
+  # Total fertility rate (blue line)
+  geom_line(aes(y = `Total fertility rate`, color = "Total fertility rate"), linewidth = 1.1) +
+
+  # Replacement level (red line)
+  geom_line(aes(y = `Cohort replacement level`, color = "Cohort replacement level"),
+            linewidth = 1, linetype = "solid") +
+
+  # Annotate key post-war milestones
+  annotate("text", x = 1960, y = 4.0, label = "1960: Contraceptive pill approved",
+           color = "black", size = 3, hjust = 0) +
+  annotate("text", x = 1969, y = 3.0, label = "1969: Decriminalization of\ncontraception & abortion",
+           color = "black", size = 3, hjust = 0) +
+  annotate("text", x = 2015, y = 1.8, label = "      2020:
+COVID-19 pandemic",
+           color = "black", size = 3, hjust = 0) +
+
+  # Color settings
+  scale_color_manual(values = c(
+    "Total fertility rate" = "blue",
+    "Cohort replacement level" = "red"
+  )) +
+
+  # Axis limits and labels
+  coord_cartesian(xlim = c(1946, 2022)) +
   labs(
-    title = "Leading Causes of Death in Canada (2022)",
-    subtitle = "Excluding causes with 0 deaths and I000",
-    x = NULL,
-    y = "Number of Deaths"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(
-    plot.title = element_text(face = "bold", size = 14, hjust = 0.5, margin = margin(b = 6)),  # ✅ Centered title
-    plot.subtitle = element_text(size = 8, hjust = 0.5, margin = margin(b = 10)),             # ✅ Centered subtitle
-    axis.text.y = element_text(size = 10),
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor = element_blank()
-  )
-
-# --- Step 3: 双栏 legend 文本 ---
-legend_text <- glue("
-I003 – Septicaemia                 I023 – Other cancer (incl. in situ, benign, or uncertain neoplasms)  
-I034 – Other heart diseases   I051 – Congenital malformations, deformations, and chromosomal abnormalities
-I026 – Other endocrinologic and metabolic diseases                   I039 – Pneumonia  
-I050 – Certain conditions originating in the perinatal period         I030 – Other diseases of nervous system
-I053 – Other accidents  I058 – Other ill-defined, unspecified and unknown causes of death
-")
-
-# --- Step 4: 绘制 legend 框 ---
-legend_box <- ggdraw() +
-  draw_label(
-    legend_text,
-    x = 0.5, y = 1,                # ✅ Center horizontally
-    hjust = 0.5, vjust = 1,
-    size = 6, lineheight = 1.35,
-    fontface = "plain"
-  ) +
-  theme(plot.margin = margin(10, 10, 10, 10))
-
-# --- Step 5: 合并主图 + legend ---
-final_plot <- plot_grid(p, legend_box, ncol = 1, rel_heights = c(3, 0.8))
-final_plot
-
-
-
-```
-
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-# --- Step 1: Read data ---
-death <- read_csv("Canada_Death.csv")
-
-# --- Step 2: Filter for 2000–2022, age 0, Canada, and selected causes ---
-death_dot <- death %>%
-  filter(country == "Canada",
-         year >= 2000, year <= 2022,
-         age_group == "0",
-         cause %in% c("I050", "I051", "I058")) %>%
-  group_by(year, cause) %>%
-  summarise(total_deaths = sum(death, na.rm = TRUE), .groups = "drop")
-
-# --- Step 3: Plot colored dots + separate gray dashed lines per cause ---
-ggplot(death_dot, aes(x = year, y = total_deaths, color = cause)) +
-  
-  # --- Colored dots for each cause ---
-  geom_point(size = 3, alpha = 0.5) +
-  
-  # --- Individual gray dashed fitted lines for each cause ---
-  geom_smooth(
-    aes(group = cause),   # separate line per cause
-    method = "lm", se = FALSE, color = "gray60",
-    linewidth = 1, linetype = "dashed"
-  ) +
-  
-  # --- Custom colors for dots ---
-  scale_color_manual(
-    values = c(
-      "I050" = "#E57373",   # red
-      "I051" = "#66BB6A",   # green
-      "I058" = "#64B5F6"    # blue
-    ),
-    labels = c(
-      "I050 – Perinatal conditions",
-      "I051 – Congenital malformations",
-      "I058 – Ill-defined causes"
-    ),
-    name = "Cause"
-  ) +
-  
-  # --- Labels and titles ---
-  labs(
-    title = "Infant Mortality in Canada (2000–2022)",
-    subtitle = "Age group: 0 years",
+    title = "Total Fertility Rate and Historical Events, Canada (1946–2022)",
+    subtitle = "Number of children per woman",
+    y = "Number of children per woman",
     x = "Year",
-    y = "Total Deaths",
+    color = NULL,
     caption = "Source: Statistics Canada"
   ) +
-  
-  # --- Style ---
-  theme_minimal(base_size = 12) +
+
+  theme_minimal(base_size = 13) +
   theme(
-    legend.position = "right",
-    legend.title = element_text(size = 8, face = "bold"),
-    legend.text = element_text(size =7),
+    # ✅ Center title, subtitle, and caption
+    plot.title = element_text(face = "bold", size = 12, hjust = 0.5, margin = margin(b = 6)),
+    plot.subtitle = element_text(size = 10, hjust = 0.5, margin = margin(b = 10)),
+    plot.caption = element_text(size = 10, hjust = 0.5, margin = margin(t = 10)),
 
-    # ✅ Center title, subtitle, caption
-    plot.title = element_text(face = "bold", size = 13, color = "#222", hjust = 0.5, margin = margin(b = 6)),
-    plot.subtitle = element_text(size = 8, color = "#555", hjust = 0.5, margin = margin(b = 10)),
-    plot.caption = element_text(size = 9, color = "gray40", hjust = 0.5, margin = margin(t = 10)),
-
-    panel.grid.minor = element_blank(),
-    panel.grid.major = element_line(color = "gray90", linewidth = 0.3)
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank()
   )
-
-
-
 ```
-asjhahk
-
+dadada
 ```{r}
+#| label: fig-prov
 #| echo: false
 #| message: false
 #| warning: false
 #| fig-height: 7
 #| fig-width: 9
+#| fig-cap: "xxxx"
 
 # === Step 0: Fertility summary ===
 fert_per_prov <- read_csv(here("fert_per_province.csv"))
@@ -393,95 +406,22 @@ ggplot(canada_map) +
   )
 
 ```
-ahjkdak
+
 ```{r}
+#| label: fig-dis
 #| echo: false
 #| message: false
 #| warning: false
-# === Step 1: Load and filter ===
-fertility_trend <- read_excel(here("Canada_Fertility_1921_2022.xlsx"))
-
-fertility_postWWII <- fertility_trend %>%
-  filter(Year >= 1946)
-
-# === Step 2: Plot ===
-ggplot(fertility_postWWII, aes(x = Year)) +
-  # Highlight selected historical/economic events after 1946
-  annotate("rect", xmin = 1947, xmax = 1948, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1953, xmax = 1954, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1974, xmax = 1975, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1981, xmax = 1982, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1990, xmax = 1992, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 2008, xmax = 2009, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 2020, xmax = 2021, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-
-  # Total fertility rate (blue line)
-  geom_line(aes(y = `Total fertility rate`, color = "Total fertility rate"), linewidth = 1.1) +
-
-  # Replacement level (red line)
-  geom_line(aes(y = `Cohort replacement level`, color = "Cohort replacement level"),
-            linewidth = 1, linetype = "solid") +
-
-  # Annotate key post-war milestones
-  annotate("text", x = 1960, y = 4.0, label = "1960: Contraceptive pill approved",
-           color = "black", size = 3, hjust = 0) +
-  annotate("text", x = 1969, y = 3.0, label = "1969: Decriminalization of\ncontraception & abortion",
-           color = "black", size = 3, hjust = 0) +
-  annotate("text", x = 2015, y = 1.8, label = "      2020:
-COVID-19 pandemic",
-           color = "black", size = 3, hjust = 0) +
-
-  # Color settings
-  scale_color_manual(values = c(
-    "Total fertility rate" = "blue",
-    "Cohort replacement level" = "red"
-  )) +
-
-  # Axis limits and labels
-  coord_cartesian(xlim = c(1946, 2022)) +
-  labs(
-    title = "Total Fertility Rate and Historical Events, Canada (1946–2022)",
-    subtitle = "Number of children per woman",
-    y = "Number of children per woman",
-    x = "Year",
-    color = NULL,
-    caption = "Source: Statistics Canada"
-  ) +
-
-  theme_minimal(base_size = 13) +
-  theme(
-    # ✅ Center title, subtitle, and caption
-    plot.title = element_text(face = "bold", size = 12, hjust = 0.5, margin = margin(b = 6)),
-    plot.subtitle = element_text(size = 10, hjust = 0.5, margin = margin(b = 10)),
-    plot.caption = element_text(size = 10, hjust = 0.5, margin = margin(t = 10)),
-
-    legend.position = "top",
-    legend.title = element_blank(),
-    legend.text = element_text(size = 10),
-    panel.grid.minor = element_blank()
-  )
-```
-ahdkjahd
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-
+#| fig-cap: "Disease Histogram by Descent"
 
 # --- Step 1: 读取并清洗数据 ---
-death <- read_csv("Canada_Death.csv")
+death <- read_csv("CA_death.csv")
 
 death_2022 <- death %>%
   filter(
     country == "Canada",
-    year == 2022,
+    year == 2022 ,
+    sex == "total",
     age_group == "0",
     death > 6,
     !str_detect(cause, "I000")     # 排除 I000
@@ -514,8 +454,8 @@ p <- ggplot(death_2022,
 # --- Step 3: 双栏 legend 文本 ---
 legend_text <- glue("
 I003 – Septicaemia                 I023 – Other cancer (incl. in situ, benign, or uncertain neoplasms)  
-I034 – Other heart diseases   I051 – Congenital malformations, deformations, and chromosomal abnormalities
 I026 – Other endocrinologic and metabolic diseases                   I039 – Pneumonia  
+I034 – Other heart diseases   I051 – Congenital malformations, deformations, and chromosomal abnormalities
 I050 – Certain conditions originating in the perinatal period         I030 – Other diseases of nervous system
 I053 – Other accidents  I058 – Other ill-defined, unspecified and unknown causes of death
 ")
@@ -524,7 +464,7 @@ I053 – Other accidents  I058 – Other ill-defined, unspecified and unknown ca
 legend_box <- ggdraw() +
   draw_label(
     legend_text,
-    x = 0.5, y = 1,                # ✅ Center horizontally
+    x = 0.5, y = 1,                
     hjust = 0.5, vjust = 1,
     size = 6, lineheight = 1.35,
     fontface = "plain"
@@ -538,19 +478,29 @@ final_plot
 
 
 ```
+@fig-dis highlights the leading causes of infant deaths (age 0) in Canada in 2022, showing that fatalities are highly concentrated within a few medical categories. The most prominent cause is certain conditions originating in the perinatal period (I050), followed by congenital malformations, deformations, and chromosomal abnormalities (I051). Together, these two categories account for the majority of infant deaths. Other notable causes, such as ill-defined or unspecified conditions (I058) and diseases of the nervous system (I030), occur at much lower frequencies. In contrast, infectious causes such as septicaemia (I003) and pneumonia (I039) contribute minimally, indicating that communicable diseases no longer play a major role in infant mortality in Canada.
+
+Infant deaths are now increasingly concentrated in biological and developmental risks surrounding the perinatal stage, such as genetic defects, chromosomal abnormalities, preterm birth, and placental dysfunction. These conditions are difficult to eliminate through conventional public health measures and require more advanced approaches, including prenatal screening, genetic counseling, and neonatal intensive care. In other words, while medical progress has significantly reduced preventable deaths, it also calls for greater attention to genetic and developmental disorders, which have become central challenges for improving infant health in the twenty-first century.
 
 ```{r}
+#| label: fig-trend
 #| echo: false
 #| message: false
 #| warning: false
+#| fig-cap: "Major Diseases Scatter Plot"
+
 # --- Step 1: Read data ---
-death <- read_csv("Canada_Death.csv")
+death <- read_csv("CA_death.csv")
 
 # --- Step 2: Filter for 2000–2022, age 0, Canada, and selected causes ---
-death_dot <- death %>% filter(country == "Canada",
-         year >= 2000, year <= 2022,
-         age_group == "0",
-         cause %in% c("I050", "I051", "I058")) %>%
+death_dot <- death %>%
+  filter(
+    country == "Canada",
+    year >= 2000, year <= 2022,
+    age_group == "0",
+    sex == "total",   # ✅ use total only
+    cause %in% c("I050", "I051", "I058")
+  ) %>%
   group_by(year, cause) %>%
   summarise(total_deaths = sum(death, na.rm = TRUE), .groups = "drop")
 
@@ -574,17 +524,19 @@ ggplot(death_dot, aes(x = year, y = total_deaths, color = cause)) +
       "I051" = "#66BB6A",   # green
       "I058" = "#64B5F6"    # blue
     ),
-    labels = c(
-      "I050 – Perinatal conditions",
-      "I051 – Congenital malformations",
-      "I058 – Ill-defined causes"
-    ),
+  labels = c(
+    "I050 – Certain conditions\noriginating in the perinatal period\n",
+
+    "I051 – Congenital malformations,\ndeformations, and chromosomal abnormalities",
+
+    "I058 – Unspecified causes of disease"
+  ),
     name = "Cause"
   ) +
   
   # --- Labels and titles ---
   labs(
-    title = "Infant Mortality in Canada (2000–2022)",
+    title = "Major Infant Mortality Causes in Canada (2000–2022)",
     subtitle = "Age group: 0 years",
     x = "Year",
     y = "Total Deaths",
@@ -610,264 +562,156 @@ ggplot(death_dot, aes(x = year, y = total_deaths, color = cause)) +
 
 
 ```
-asjhahk
-
+As shown in @fig-trend, the three major causes of infant mortality in Canada—I050 (conditions originating in the perinatal period), I051 (congenital malformations, deformations, and chromosomal abnormalities), and I058 (unspecified causes of disease)—display distinct patterns between 2000 and 2022. Among them, I050 consistently remains the leading cause of infant deaths, with relatively stable numbers but a slight increase in recent years. I051 shows comparatively little change over time, exhibiting minor fluctuations and a modest overall decline. In contrast, I058 demonstrates the greatest variability, particularly after 2015, indicating a rising proportion of deaths classified under diagnostic uncertainty or cases lacking clear medical attribution.
 ```{r}
+#| label: fig-sex
 #| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Gender-Specific Death"
+
+death <- read_csv("CA_death.csv")
+
+# 选取感兴趣的疾病
+selected_causes <- c("I050", "I051", "I058")
+
+# 筛选 + 按年份和性别汇总死亡数
+df_plot <- death %>%
+  filter(cause %in% selected_causes) %>%
+  group_by(year, sex, cause) %>%
+  summarise(death = sum(death, na.rm = TRUE), .groups = "drop")
+
+# 为 facet 设置标签（让标题更易读）
+cause_labels <- c(
+  "I050" = "I050 ",
+  "I051" = "I051 ",
+  "I058" = "I058 "
+)
+
+# 绘图
+ggplot(df_plot, aes(x = year, y = death, color = sex)) +
+  geom_line(size = 1.0, alpha = 0.9) +
+  geom_point(size = 1.4, alpha = 0.8) +
+  facet_wrap(~ cause, ncol = 3, scales = "fixed",  # ✅ 固定 y 轴范围
+             labeller = as_labeller(cause_labels)) +
+  scale_color_manual(
+    values = c("males" = "#3B82F6", "females" = "#EC4899", "total" = "grey"),
+    labels = c("Males", "Females","Total")
+  ) +
+  labs(
+    title = "Gender Differences in 3 Major Cause (2000–2022)",
+    x = "Year", y = "Deaths (count)",
+    color = "Sex"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 8),
+    strip.text = element_text(face = "bold", size = 9),
+    panel.grid.minor = element_blank(),
+    panel.spacing = unit(1, "lines")
+  )
+
+```
+In @fig-sex, it shows that for I050 (conditions originating in the perinatal period), male deaths consistently exceed those of females. Although both sexes follow similar long-term patterns, a gradual decline is observed after 2010, followed by a slight rebound in recent years. In contrast, for I051 (congenital malformations, deformations, and chromosomal abnormalities) and I058 (unspecified causes of disease), sex differences are relatively small and remain stable over time, indicating that male and female infants have broadly comparable levels of exposure and recovery capacity. In general, and perhaps surprisingly, male infants are biologically more vulnerable during the perinatal stage, which suggests a greater susceptibility to preterm birth, respiratory distress, and other early developmental complications. However, beyond this stage, no profound gender differences are observed in disease patterns, and health risks become largely comparable between male and female infants after birth.
+```{r}
+#| eval: false
 #| message: false
 #| warning: false
 #| fig-height: 7
 #| fig-width: 9
+#| include: false
 
-# === Step 0: Fertility summary ===
-fert_per_prov <- read_csv(here("fert_per_province.csv"))
+# --- Step 1: Read fertility data ---
+fert <- read_csv(here("Cleaned_fert_2023.csv"))
 
-fert_2023_summary <- fert_per_prov %>%
-  filter(
-    REF_DATE == 2023,
-    grepl("total fertility rate", Characteristics, ignore.case = TRUE)
-  ) %>%
-  select(GEO, REF_DATE, Characteristics, VALUE) %>%
-  mutate(
-    GEO_clean = str_replace(GEO, ", place of residence of mother", "") %>% str_trim(),
-    GEO_match = recode(GEO_clean,
-      "Newfoundland and Labrador" = "Newfoundland and Labrador",
-      "Prince Edward Island" = "Prince Edward Island",
-      "Nova Scotia" = "Nova Scotia",
-      "New Brunswick" = "New Brunswick",
-      "Quebec" = "Québec",
-      "Ontario" = "Ontario",
-      "Manitoba" = "Manitoba",
-      "Saskatchewan" = "Saskatchewan",
-      "Alberta" = "Alberta",
-      "British Columbia" = "British Columbia",
-      "Yukon" = "Yukon",
-      "Northwest Territories" = "Northwest Territories",
-      "Nunavut" = "Nunavut"
-    )
-  )
+# --- Step 2: Normalize names for map matching ---
+fert <- fert %>%
+  mutate(Country = case_when(
+    Country == "United States" ~ "United States of America",
+    Country == "Russia" ~ "Russian Federation",
+    TRUE ~ Country
+  ))
 
-# === Step 1: Read Canada map and merge ===
-canada <- ne_states(country = "canada", returnclass = "sf")
-canada_map <- canada %>%
-  left_join(fert_2023_summary, by = c("name" = "GEO_match"))
-
-# === Step 2: Province abbreviations ===
-province_abbrev <- c(
-  "Newfoundland and Labrador" = "NL",
-  "Prince Edward Island" = "PE",
-  "Nova Scotia" = "NS",
-  "New Brunswick" = "NB",
-  "Québec" = "QC",
-  "Ontario" = "ON",
-  "Manitoba" = "MB",
-  "Saskatchewan" = "SK",
-  "Alberta" = "AB",
-  "British Columbia" = "BC",
-  "Yukon" = "YT",
-  "Northwest Territories" = "NT",
-  "Nunavut" = "NU"
+# --- Step 3: Define target countries (based on real dataset names) ---
+target_countries <- c(
+  "United States of America", "United Kingdom", "France", "Germany",
+  "Italy", "Canada", "Japan", "Russian Federation",
+  "China", "India", "Brazil","Iceland"
 )
 
-# === Step 3: Province centroids + abbreviated labels ===
-province_centroids <- st_centroid(canada_map) %>%
+# (the rest of your plotting code stays the same)
+
+
+# --- Step 4: Filter for target countries only ---
+fert_selected <- fert %>%
+  filter(Country %in% target_countries)
+
+# --- Step 5: Get world map + centroids ---
+world <- ne_countries(scale = "medium", returnclass = "sf")
+world_points <- st_centroid(world) %>%
   cbind(st_coordinates(.)) %>%
-  mutate(
-    abbrev = recode(name, !!!province_abbrev),
-    label_combo = paste0(abbrev, "\n", round(VALUE, 2))
-  )
+  select(name, X, Y)
 
-# Move NU and NT labels
-province_centroids <- province_centroids %>%
-  mutate(
-    X = case_when(
-      abbrev == "NU" ~ X - 5,       # shift left
-      abbrev == "NT" ~ X,           # keep x position
-      TRUE ~ X
-    ),
-    Y = case_when(
-      abbrev == "NU" ~ Y - 6,     # shift down
-      abbrev == "NT" ~ Y - 2.5,     # shift slightly down
-      TRUE ~ Y
-    )
-  )
+# --- Step 6: Join coordinates ---
+fert_map <- fert_selected %>%
+  left_join(world_points, by = c("Country" = "name")) %>%
+  filter(!is.na(X) & !is.na(Y))
 
+# --- Step 7: Plot map ---
+ggplot() +
+  geom_sf(data = world, fill = "gray97", color = "gray80", size = 0.2) +
 
-# === Step 4: Plot ===
-ggplot(canada_map) +
-  geom_sf(aes(fill = VALUE), color = "white", linewidth = 0.3) +
+  # --- Transparent, coordinated bubbles ---
+  geom_point(
+    data = fert_map,
+    aes(x = X, y = Y, size = FertilityRate_2023, fill = FertilityRate_2023),
+    shape = 21, color = "black", stroke = 0.25,
+    alpha = 0.55   # ✨ transparent
+  ) +
+
+  # --- Labels with fertility values ---
   geom_text_repel(
-    data = province_centroids,
-    aes(X, Y, label = label_combo),
-    size = 3.5, color = "black", fontface = "bold",
-    box.padding = 0.5, point.padding = 0.3,
-    nudge_y = 0.8, segment.color = "gray70", max.overlaps = 20
+    data = fert_map,
+    aes(x = X, y = Y, label = paste0(Country, "\n", round(FertilityRate_2023, 2))),
+    size = 2.4, fontface = "bold",
+    color = "black",
+    segment.size = 0.15,
+    box.padding = 0.25,
+    point.padding = 0.2
   ) +
-  coord_sf(xlim = c(-140, -52), ylim = c(41, 78), expand = FALSE) +
-  scale_fill_gradient(
-    low = "#FDE0DD",
-    high = "#99000D",
-    name = "Fertility Rate\n(children per woman)",
-    na.value = "grey90"
+
+  # --- Coordinated blue gradient (soft, elegant) ---
+  scale_fill_gradientn(
+    colors = c("#fff5f0", "#fcbba1", "#ef3b2c", "#a50f15", "#67000d"),
+    name = "Fertility Rate (2023)"
   ) +
+
+  scale_size_continuous(
+    range = c(4, 16),
+    name = "Fertility Rate (2023)",
+    labels = scales::number_format(accuracy = 0.1)
+  ) +
+
+  coord_sf(expand = FALSE) +
   labs(
-    title = "Total Fertility Rate by Province (2023)",
-    caption = "Source: Statistics Canada"
+    title = "Fertility Rate (2023): G8 + China, India, Brazil",
+    subtitle = "Bubble size and color represent births per woman",
+    x = "", y = ""
   ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    legend.position = "right",
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
-    plot.subtitle = element_text(size = 12, hjust = 0.5),
-    plot.caption = element_text(size = 10, hjust = 0.5)
-  )
-
-```
-ahjkdak
-```{r}
-#| echo: false
-#| message: false
-#| warning: false
-# === Step 1: Load and filter ===
-fertility_trend <- read_excel(here("Canada_Fertility_1921_2022.xlsx"))
-
-fertility_postWWII <- fertility_trend %>%
-  filter(Year >= 1946)
-
-# === Step 2: Plot ===
-ggplot(fertility_postWWII, aes(x = Year)) +
-  # Highlight selected historical/economic events after 1946
-  annotate("rect", xmin = 1947, xmax = 1948, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1953, xmax = 1954, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1974, xmax = 1975, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1981, xmax = 1982, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 1990, xmax = 1992, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 2008, xmax = 2009, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-  annotate("rect", xmin = 2020, xmax = 2021, ymin = -Inf, ymax = Inf,
-           fill = "grey70", alpha = 0.2) +
-
-  # Total fertility rate (blue line)
-  geom_line(aes(y = `Total fertility rate`, color = "Total fertility rate"), linewidth = 1.1) +
-
-  # Replacement level (red line)
-  geom_line(aes(y = `Cohort replacement level`, color = "Cohort replacement level"),
-            linewidth = 1, linetype = "solid") +
-
-  # Annotate key post-war milestones
-  annotate("text", x = 1960, y = 4.0, label = "1960: Contraceptive pill approved",
-           color = "black", size = 3, hjust = 0) +
-  annotate("text", x = 1969, y = 3.0, label = "1969: Decriminalization of\ncontraception & abortion",
-           color = "black", size = 3, hjust = 0) +
-  annotate("text", x = 2015, y = 1.8, label = "      2020:
-COVID-19 pandemic",
-           color = "black", size = 3, hjust = 0) +
-
-  # Color settings
-  scale_color_manual(values = c(
-    "Total fertility rate" = "blue",
-    "Cohort replacement level" = "red"
-  )) +
-
-  # Axis limits and labels
-  coord_cartesian(xlim = c(1946, 2022)) +
-  labs(
-    title = "Total Fertility Rate and Historical Events, Canada (1946–2022)",
-    subtitle = "Number of children per woman",
-    y = "Number of children per woman",
-    x = "Year",
-    color = NULL,
-    caption = "Source: Statistics Canada"
-  ) +
-
-  theme_minimal(base_size = 13) +
-  theme(
-    # ✅ Center title, subtitle, and caption
-    plot.title = element_text(face = "bold", size = 12, hjust = 0.5, margin = margin(b = 6)),
-    plot.subtitle = element_text(size = 10, hjust = 0.5, margin = margin(b = 10)),
-    plot.caption = element_text(size = 10, hjust = 0.5, margin = margin(t = 10)),
-
-    legend.position = "top",
-    legend.title = element_blank(),
-    legend.text = element_text(size = 10),
-    panel.grid.minor = element_blank()
-  )
-```
-<<<<<<< HEAD
-
-=======
-```{r}
-library(tidyverse)
-
-# --- Step 1: Read data ---
-death <- read_csv("Canada_Death.csv")
-
-# --- Step 2: Filter for 2000–2022, age 0, Canada, and selected causes ---
-death_dot <- death %>%
-  filter(country == "Canada",
-         year >= 2000, year <= 2022,
-         age_group == "0",
-         cause %in% c("I050", "I051", "I058")) %>%
-  group_by(year, cause) %>%
-  summarise(total_deaths = sum(death, na.rm = TRUE), .groups = "drop")
-
-# --- Step 3: Plot colored dots + separate gray dashed lines per cause ---
-ggplot(death_dot, aes(x = year, y = total_deaths, color = cause)) +
-  
-  # --- Colored dots for each cause ---
-  geom_point(size = 3, alpha = 0.6) +
-  
-  # --- Individual gray dashed fitted lines for each cause ---
-  geom_smooth(
-    aes(group = cause),   # separate line per cause
-    method = "lm", se = FALSE, color = "gray60",
-    linewidth = 1, linetype = "dashed"
-  ) +
-  
-  # --- Custom colors for dots ---
-  scale_color_manual(
-    values = c(
-      "I050" = "#E57373",   # red
-      "I051" = "#66BB6A",   # green
-      "I058" = "#64B5F6"    # blue
-    ),
-    labels = c(
-      "I050 – Perinatal conditions",
-      "I051 – Congenital malformations",
-      "I058 – Ill-defined causes"
-    ),
-    name = "Cause"
-  ) +
-  
-  # --- Labels and titles ---
-  labs(
-    title = "Infant Mortality in Canada (2000–2022)",
-    subtitle = "Age group: 0 years; Three selected causes with individual gray trend lines",
-    x = "Year",
-    y = "Total Deaths"
-  ) +
-  
-  # --- Style ---
   theme_minimal(base_size = 14) +
   theme(
-    legend.position = "right",
-    legend.title = element_text(size = 10, face = "bold"),
-    legend.text = element_text(size = 9),
-    plot.title = element_text(face = "bold", size = 16, color = "#222"),
-    plot.subtitle = element_text(size = 12, color = "#555"),
-    panel.grid.minor = element_blank(),
-    panel.grid.major = element_line(color = "gray90", linewidth = 0.3)
+    legend.position = "bottom",
+    legend.box = "horizontal",
+    plot.title = element_text(size = 14, face = "bold",hjust=0.5),
+    plot.subtitle = element_text(size = 11,hjust=0.5),
+    panel.grid = element_line(color = "gray90", size = 0.2),
+    legend.title = element_text(size = 9),
+    legend.text = element_text(size = 8)
   )
 
 
 ```
-
